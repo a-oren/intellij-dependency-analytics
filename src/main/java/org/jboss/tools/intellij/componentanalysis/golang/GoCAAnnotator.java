@@ -72,8 +72,11 @@ public class GoCAAnnotator extends CAAnnotator {
                 continue;
             }
 
-            // Skip if line contains trustify-da-ignore or exhortignore
-            if (line.contains(TRUSTIFY_DA_IGNORE) || line.contains(EXHORT_IGNORE)) {
+            // Skip if line has a valid ignore marker.
+            // Recognized formats: "// exhortignore", "// indirect; exhortignore",
+            // "// indirect; // exhortignore". Does NOT match "// indirect //exhortignore"
+            // (no semicolon) — that format is ambiguous and not treated as ignored.
+            if (hasValidIgnoreMarker(line)) {
                 continue;
             }
 
@@ -153,6 +156,26 @@ public class GoCAAnnotator extends CAAnnotator {
     @Override
     protected @Nullable LicenseUpdateIntentionAction createLicenseUpdateFix(PsiElement element, String newLicense) {
         return null;
+    }
+
+    /**
+     * Checks if a go.mod line has a valid ignore marker. Only matches:
+     * - "// exhortignore" or "// trustify-da-ignore" (standalone)
+     * - "// indirect; exhortignore" or "// indirect; // exhortignore" (semicolon-separated)
+     * Does NOT match "// indirect //exhortignore" (no semicolon).
+     */
+    static boolean hasValidIgnoreMarker(String line) {
+        if (!line.contains(EXHORT_IGNORE) && !line.contains(TRUSTIFY_DA_IGNORE)) {
+            return false;
+        }
+        int commentStart = line.indexOf("//");
+        if (commentStart < 0) {
+            return false;
+        }
+        String comment = line.substring(commentStart + 2).trim();
+        String ignorePattern = "(" + EXHORT_IGNORE + "|" + TRUSTIFY_DA_IGNORE + ")";
+        return comment.matches(ignorePattern)
+                || comment.matches("indirect\\s*;\\s*(//)?\\s*" + ignorePattern);
     }
 
     private PsiElement findElementAtLine(PsiFile file, int lineNumber) {
